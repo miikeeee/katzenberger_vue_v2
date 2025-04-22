@@ -136,7 +136,7 @@ const selectBuildingType = (type: BuildingType) => {
           :max="appStore.currentYear"
           v-model.number="constructionYear"
           aria-describedby="constructionYearError"
-          aria-invalid="!!appStore.validationErrors.constructionYear"
+          :aria-invalid="!!appStore.validationErrors.constructionYear"
         >
         <!-- Fehler-Icon -->
         <span v-if="!!appStore.validationErrors.constructionYear" class="icon is-small is-right has-text-danger">
@@ -177,7 +177,7 @@ const selectBuildingType = (type: BuildingType) => {
           min="70" max="400" step="0.1"
           v-model.number="heatedArea"
           aria-describedby="heatedAreaError"
-          aria-invalid="!!appStore.validationErrors.heatedArea"
+          :aria-invalid="!!appStore.validationErrors.heatedArea"
         >
          <!-- Fehler-Icon -->
         <span v-if="!!appStore.validationErrors.heatedArea" class="icon is-small is-right has-text-danger">
@@ -272,13 +272,19 @@ const selectBuildingType = (type: BuildingType) => {
 }
 
 /* --- Stile für Input-Felder und Fehler --- */
-/* Stellt sicher, dass Icon im Control ist und nicht den Text überlagert */
 .control.has-icons-right .input {
     padding-right: 2.5em; /* Platz für Icon */
 }
 .control.has-icons-right .icon.is-right {
-    right: 0; /* Standard Bulma Position */
+    right: 0.25em; /* Ggf. anpassen */
+    top: 50%;
+    transform: translateY(-50%);
     pointer-events: none; /* Icon nicht klickbar */
+    height: 2.5em; /* Bulma Standard für Input Höhe */
+    width: 2.5em;
+    display: inline-flex; /* Stellt Icon-Zentrierung sicher */
+    align-items: center;
+    justify-content: center;
 }
 .help.is-danger {
      margin-top: 0.25rem;

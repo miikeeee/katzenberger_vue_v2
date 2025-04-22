@@ -51,7 +51,7 @@ const isCurrentStepValid = computed(() => {
 function handleNext() {
   // 1. Prüfen, ob der aktuelle Schritt gültig ist
   if (!isCurrentStepValid.value) {
-      console.warn(`Schritt ${appStore.currentStepId} ist nicht valide. Weiter-Button sollte deaktiviert sein.`);
+      console.warn(`Versuch, von Schritt ${appStore.currentStepId} weiterzugehen, obwohl ungültig.`);
       // HINWEIS: Das Setzen von Fehlern passiert idealerweise direkt bei der Eingabe im Store/Komponente.
       // Hier könnte man höchstens einen allgemeinen Hinweis geben oder Fokus setzen.
       return; // Verhindert das Navigieren
@@ -91,7 +91,7 @@ async function triggerCalculation() {
         await new Promise(resolve => setTimeout(resolve, 1500)); // Warte 1.5 Sek.
         // Simuliertes Ergebnis
         const dummyResult = {
-            heizlastGesamt: Math.round(appStore.formData.heatedArea * 75 * (appStore.formData.constructionYear < 1980 ? 1.2 : 1)), // Sehr grobe Schätzung
+            heizlastGesamt: Math.round((appStore.formData.heatedArea ?? 100) * 75 * ((appStore.formData.constructionYear ?? 2000) < 1980 ? 1.2 : 1)), // ?? Operator für null-Werte
             raumweise: [{ raum: "Wohnzimmer", last: 1200 }, { raum: "Küche", last: 800 }],
             empfehlung: "Basierend auf Ihren Angaben empfehlen wir...",
             eingabenPruefung: appStore.formData, // Eingaben zur Kontrolle
@@ -198,7 +198,7 @@ watch(() => appStore.currentStepId, () => {
            v-if="Number(appStore.currentStepId) === totalSteps"
            class="button is-success"
            :class="{ 'is-loading': appStore.isUploading }"
-           @click="handleNext"
+           @click="handleNext" <!-- Ruft handleNext auf, das dann triggerCalculation auslöst -->
            :disabled="!isCurrentStepValid || appStore.isUploading"
            aria-label="Heizlast berechnen"
          >

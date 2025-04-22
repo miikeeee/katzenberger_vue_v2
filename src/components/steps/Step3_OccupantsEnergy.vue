@@ -109,7 +109,7 @@ const selectCombustionTech = (tech: CombustionTechType) => {
           step="1"
           v-model.number="occupants"
           aria-describedby="occupantsError"
-          aria-invalid="!!appStore.validationErrors.occupants"
+          :aria-invalid="!!appStore.validationErrors.occupants"
         >
         <!-- Fehler-Icon -->
         <span v-if="appStore.validationErrors.occupants" class="icon is-small is-right has-text-danger">

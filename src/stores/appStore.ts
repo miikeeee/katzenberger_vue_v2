@@ -19,14 +19,14 @@ export interface RenovationState {
 export interface FormData {
     // Schritt 1
     buildingType: BuildingType | null;
-    constructionYear: number | null;
-    heatedArea: number | null;
+    constructionYear: number | null; // Erwartet number | null
+    heatedArea: number | null;     // Erwartet number | null
     // Schritt 2
     renovations: RenovationState;
     // Schritt 3
-    occupants: number | null;
+    occupants: number | null;        // Erwartet number | null
     energySource: EnergySourceType | null;
-    combustionTechnology: CombustionTechType | null;
+    combustionTechnology: CombustionTechType | null; // Hinzugefügt
     // Platzhalter
     energyConsumption: number | null;
     heatingSystem: 'Radiator' | 'Floor' | 'Both' | null;
@@ -44,7 +44,7 @@ interface ValidationErrors {
     renovations: string | null;
     occupants: string | null;
     energySource: string | null;
-    combustionTechnology: string | null;
+    combustionTechnology: string | null; // Hinzugefügt
     [key: string]: string | null;
 }
 
@@ -60,7 +60,7 @@ export const useAppStore = defineStore('app', () => {
         renovations: { Dach: false, Fassade: false, Fenster: false, Keine: false },
         occupants: null,
         energySource: null,
-        combustionTechnology: null,
+        combustionTechnology: null, // Initialisiert
         energyConsumption: null,
         heatingSystem: null,
         waterHeating: null,
@@ -76,7 +76,7 @@ export const useAppStore = defineStore('app', () => {
         renovations: null,
         occupants: null,
         energySource: null,
-        combustionTechnology: null,
+        combustionTechnology: null, // Initialisiert
     });
 
     // --- GETTERS ---
@@ -84,7 +84,6 @@ export const useAppStore = defineStore('app', () => {
     const previousStepExists = computed(() => stepHistory.value.length > 0);
     const currentYear = computed(() => new Date().getFullYear());
 
-    // Getter für Schritt 1
     const isStep1DataComplete = computed(() => {
         const typeSelected = !!formData.value.buildingType;
         const yearValid = formData.value.constructionYear !== null && !validationErrors.value.constructionYear;
@@ -93,19 +92,16 @@ export const useAppStore = defineStore('app', () => {
         return typeSelected && yearValid && areaValid;
     });
 
-    // Getter für Schritt 2
     const isStep2DataComplete = computed(() => {
         return !!formData.value.renovations &&
                Object.values(formData.value.renovations).some(isSelected => isSelected);
     });
 
-    // Getter für Schritt 3 - Relevant für Verbrennungstechnik?
      const isCombustionTechRelevant = computed(() => {
         const src = formData.value.energySource;
         return src === 'Öl' || src === 'Gas' || src === 'Pellets';
     });
 
-    // Getter für Schritt 3 - Gesamtvalidierung
     const isStep3DataComplete = computed(() => {
         const baseComplete = formData.value.occupants !== null && !validationErrors.value.occupants &&
                              formData.value.energySource !== null && !validationErrors.value.energySource;
@@ -117,6 +113,7 @@ export const useAppStore = defineStore('app', () => {
             return baseComplete;
         }
     });
+    // --- Fügen Sie hier Getter für weitere Schritte hinzu ---
 
     // --- ACTIONS ---
     function nextStep(stepId: string | number) {
@@ -139,86 +136,82 @@ export const useAppStore = defineStore('app', () => {
             const newSource = data.energySource;
             const isTechStillRelevant = newSource === 'Öl' || newSource === 'Gas' || newSource === 'Pellets';
             if (!isTechStillRelevant) {
-                // Wenn die Technik nicht mehr relevant ist, setze sie im *data*-Objekt zurück,
-                // damit sie zusammen mit energySource aktualisiert wird.
-                 data.combustionTechnology = null; // Setze es im Payload zurück
+                 data.combustionTechnology = null;
                  if(validationErrors.value.combustionTechnology){
-                    clearValidationError('combustionTechnology'); // Lösche auch den Fehler
+                    clearValidationError('combustionTechnology');
                  }
             }
         }
 
-        // Führe das Update durch
         formData.value = { ...formData.value, ...data };
 
-        // Zugehörige Fehler löschen (redundant zu Settern, aber sicher ist sicher)
-        if ('renovations' in data && isStep2DataComplete.value) {
-             clearValidationError('renovations');
-        }
-        if ('occupants' in data && formData.value.occupants !== null && !validationErrors.value.occupants) {
-             clearValidationError('occupants');
-        }
-        if ('energySource' in data && formData.value.energySource !== null) {
-            clearValidationError('energySource');
-        }
-        if ('combustionTechnology' in data && formData.value.combustionTechnology !== null) {
-            clearValidationError('combustionTechnology');
-        }
+        // Zugehörige Fehler löschen, wenn Daten gültig werden könnten
+        if ('renovations' in data && isStep2DataComplete.value) clearValidationError('renovations');
+        if ('occupants' in data && formData.value.occupants !== null && !validationErrors.value.occupants) clearValidationError('occupants');
+        if ('energySource' in data && formData.value.energySource !== null) clearValidationError('energySource');
+        if ('combustionTechnology' in data && formData.value.combustionTechnology !== null) clearValidationError('combustionTechnology');
     }
 
      function setConstructionYear(year: number | null | string) {
-        console.log("setConstructionYear called with:", year); // DEBUG
-        const numYear = typeof year === 'string' && year.trim() !== '' ? parseInt(year, 10) : year;
-        let currentData = formData.value.constructionYear; // Behalte aktuellen Wert für updateFormData
+        // console.log("setConstructionYear called with:", year); // DEBUG
+        const parsedValue = typeof year === 'string' && year.trim() !== '' ? parseInt(year, 10) : year;
+        let valueToStore: number | null = null;
         let errorMsg: string | null = null;
 
-        clearValidationError('constructionYear'); // Fehler immer zuerst löschen
+        clearValidationError('constructionYear');
 
-        if (numYear === null || (typeof numYear === 'number' && isNaN(numYear))) {
-             currentData = null;
-             // errorMsg = "Baujahr ist ein Pflichtfeld."; // Optional
-        } else if (numYear < 1850) {
-            errorMsg = `Baujahr muss nach 1850 liegen.`;
-            currentData = numYear; // Wert trotzdem setzen
-        } else if (numYear > currentYear.value) {
-            errorMsg = `Baujahr darf nicht in der Zukunft liegen (max. ${currentYear.value}).`;
-            currentData = numYear; // Wert trotzdem setzen
+        if (parsedValue === null || (typeof parsedValue === 'number' && isNaN(parsedValue))) {
+            valueToStore = null;
+        } else if (typeof parsedValue === 'number') {
+            if (parsedValue < 1850) {
+                errorMsg = `Baujahr muss nach 1850 liegen.`;
+                valueToStore = parsedValue;
+            } else if (parsedValue > currentYear.value) {
+                errorMsg = `Baujahr darf nicht in der Zukunft liegen (max. ${currentYear.value}).`;
+                valueToStore = parsedValue;
+            } else {
+                valueToStore = parsedValue;
+            }
         } else {
-            currentData = numYear; // Gültiger Wert
+             valueToStore = null;
+             errorMsg = "Ungültige Eingabe für Baujahr.";
         }
 
-        // Daten und Fehler aktualisieren
-        updateFormData({ constructionYear: currentData }); // formData aktualisieren
-        validationErrors.value.constructionYear = errorMsg; // Fehler setzen
-        console.log("validationErrors after setConstructionYear:", JSON.stringify(validationErrors.value)); // DEBUG
+        updateFormData({ constructionYear: valueToStore });
+        validationErrors.value.constructionYear = errorMsg;
+        // console.log("validationErrors after setConstructionYear:", JSON.stringify(validationErrors.value)); // DEBUG
     }
 
     function setHeatedArea(area: number | null | string) {
-        console.log("setHeatedArea called with:", area); // DEBUG
-        const numArea = typeof area === 'string' && area.trim() !== ''
+        // console.log("setHeatedArea called with:", area); // DEBUG
+        const parsedValue = typeof area === 'string' && area.trim() !== ''
             ? parseFloat(area.replace(',', '.'))
             : (typeof area === 'number' ? area : null);
-        let currentData = formData.value.heatedArea;
+        let valueToStore: number | null = null;
         let errorMsg: string | null = null;
 
         clearValidationError('heatedArea');
 
-        if (numArea === null || (typeof numArea === 'number' && isNaN(numArea))) {
-           currentData = null;
-           // errorMsg = "Fläche ist ein Pflichtfeld."; // Optional
-        } else if (numArea < 70) {
-            errorMsg = `Fläche muss mindestens 70 m² betragen.`;
-            currentData = numArea;
-        } else if (numArea > 400) {
-            errorMsg = `Fläche darf maximal 400 m² betragen.`;
-            currentData = numArea;
+        if (parsedValue === null || (typeof parsedValue === 'number' && isNaN(parsedValue))) {
+           valueToStore = null;
+        } else if (typeof parsedValue === 'number') {
+            if (parsedValue < 70) {
+                errorMsg = `Fläche muss mindestens 70 m² betragen.`;
+                valueToStore = parsedValue;
+            } else if (parsedValue > 400) {
+                errorMsg = `Fläche darf maximal 400 m² betragen.`;
+                valueToStore = parsedValue;
+            } else {
+               valueToStore = parsedValue;
+            }
         } else {
-           currentData = numArea;
+            valueToStore = null;
+            errorMsg = "Ungültige Eingabe für Fläche.";
         }
 
-        updateFormData({ heatedArea: currentData });
+        updateFormData({ heatedArea: valueToStore });
         validationErrors.value.heatedArea = errorMsg;
-        console.log("validationErrors after setHeatedArea:", JSON.stringify(validationErrors.value)); // DEBUG
+        // console.log("validationErrors after setHeatedArea:", JSON.stringify(validationErrors.value)); // DEBUG
     }
 
     function toggleRenovation(part: RenovationPart) {
@@ -237,22 +230,26 @@ export const useAppStore = defineStore('app', () => {
     }
 
     function setOccupants(count: number | null | string) {
-        const numCount = typeof count === 'string' && count.trim() !== '' ? parseInt(count, 10) : count;
-        let currentData = formData.value.occupants;
+        const parsedValue = typeof count === 'string' && count.trim() !== '' ? parseInt(count, 10) : count;
+        let valueToStore: number | null = null;
         let errorMsg: string | null = null;
 
         clearValidationError('occupants');
 
-        if (numCount === null || (typeof numCount === 'number' && isNaN(numCount))) {
-            currentData = null;
-            // errorMsg = "Bitte geben Sie die Personenzahl an."; // Optional
-        } else if (numCount < 1 || numCount > 10) {
-            errorMsg = "Die Personenzahl muss zwischen 1 und 10 liegen.";
-            currentData = numCount;
+        if (parsedValue === null || (typeof parsedValue === 'number' && isNaN(parsedValue))) {
+            valueToStore = null;
+        } else if (typeof parsedValue === 'number') {
+            if (parsedValue < 1 || parsedValue > 10) {
+                errorMsg = "Die Personenzahl muss zwischen 1 und 10 liegen.";
+                valueToStore = parsedValue;
+            } else {
+                valueToStore = Math.floor(parsedValue);
+            }
         } else {
-            currentData = Math.floor(numCount);
+             valueToStore = null;
+             errorMsg = "Ungültige Eingabe für Personenzahl.";
         }
-        updateFormData({ occupants: currentData });
+        updateFormData({ occupants: valueToStore });
         validationErrors.value.occupants = errorMsg;
     }
 
@@ -262,12 +259,10 @@ export const useAppStore = defineStore('app', () => {
             energySource: source,
             combustionTechnology: null // Immer zurücksetzen
         });
-        // Fehler löschen (passiert jetzt in updateFormData)
     }
 
     function setCombustionTechnology(tech: CombustionTechType | null) {
         updateFormData({ combustionTechnology: tech });
-        // Fehler löschen (passiert jetzt in updateFormData)
     }
 
     function clearValidationError(field: keyof ValidationErrors) {
