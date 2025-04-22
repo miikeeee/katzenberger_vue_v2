@@ -12,7 +12,7 @@ const steps = {
   3: defineAsyncComponent(() => import('./components/steps/Step3_OccupantsEnergy.vue')),
   // --- Fügen Sie hier Imports für weitere Schritt-Komponenten hinzu ---
   // Beispiel für Schritt 4 (Platzhalter erstellen oder korrekten Pfad angeben)
-  4: defineAsyncComponent(() => import('./components/steps/Step4_HeatingSystem.vue')),
+  //4: defineAsyncComponent(() => import('./components/steps/Step4_HeatingSystem.vue')),
   // 5: defineAsyncComponent(() => import('./components/steps/Step5_Summary.vue')),
   // 6: defineAsyncComponent(() => import('./components/steps/Step6_Results.vue')),
 };

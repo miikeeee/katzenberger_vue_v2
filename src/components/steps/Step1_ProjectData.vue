@@ -1,293 +1,255 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-// Pfad anpassen, falls nötig
-import { useAppStore, type BuildingType } from '../../stores/appStore';
-import { onMounted, onUnmounted } from 'vue'; // Für Popup-Schließ-Logik
+import { computed, defineAsyncComponent, watch } from 'vue';
+import { useAppStore } from './stores/appStore.ts';
 
-// Initialisiere den Store
+// Initialisiere den Pinia Store
 const appStore = useAppStore();
 
-// --- State und Logik für Info-Popups ---
-const activeInfoPopup = ref<string | null>(null); // Speichert den Key des offenen Popups
-const infoTexts = {
-    buildingType: 'Wählen Sie den passenden Gebäudetyp aus. Dies beeinflusst Standardannahmen für die Berechnung.',
-    constructionYear: `Geben Sie das Baujahr des Gebäudes an (zwischen 1850 und ${appStore.currentYear}). Es wird zur Abschätzung von U-Werten verwendet, falls keine genauen Werte bekannt sind.`,
-    heatedArea: 'Geben Sie die gesamte beheizte Wohn- oder Nutzfläche in Quadratmetern an (zwischen 70 und 400 m²).'
+// Asynchrone Definition der Komponenten für jeden Schritt (Code Splitting)
+const steps = {
+  1: defineAsyncComponent(() => import('./components/steps/Step1_ProjectData.vue')),
+  2: defineAsyncComponent(() => import('./components/steps/Step2_Renovations.vue')),
+  3: defineAsyncComponent(() => import('./components/steps/Step3_OccupantsEnergy.vue')),
+  // --- Fügen Sie hier Imports für weitere Schritt-Komponenten hinzu ---
+  // Beispiel für Schritt 4 (Platzhalter erstellen oder korrekten Pfad angeben)
+ // 4: defineAsyncComponent(() => import('./components/steps/Step4_HeatingSystem.vue')),
+  // 5: defineAsyncComponent(() => import('./components/steps/Step5_Summary.vue')),
+  // 6: defineAsyncComponent(() => import('./components/steps/Step6_Results.vue')),
 };
 
-// Funktion zum Öffnen/Schließen eines Popups
-const toggleInfoPopup = (field: string) => {
-    activeInfoPopup.value = activeInfoPopup.value === field ? null : field;
-};
+// Bestimme die höchste Schrittnummer aus den definierten Schritten
+const stepKeys = computed(() => Object.keys(steps).map(Number));
+const lastStepKey = computed(() => Math.max(0, ...stepKeys.value)); // Verwende 0 als Fallback, falls steps leer ist
+const totalSteps = computed(() => lastStepKey.value); // Gesamtzahl der Eingabeschritte
 
-// Funktion, um Popups zu schließen, wenn außerhalb geklickt wird
-const handleClickOutside = (event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    if (!target.closest('.info-icon-button') && !target.closest('.info-popup')) {
-        activeInfoPopup.value = null;
+// Bestimmt die Komponente, die für den aktuellen Schritt angezeigt werden soll
+const currentStepComponent = computed(() => {
+  const stepId = appStore.currentStepId;
+  // @ts-ignore - TypeScript kann den dynamischen Index nicht immer sicher auflösen
+  return steps[stepId] || null; // Fallback, falls der Schritt nicht definiert ist
+});
+
+// Überprüft, ob der aktuelle Schritt gültig ist (alle notwendigen Daten vorhanden und korrekt)
+const isCurrentStepValid = computed(() => {
+    const stepId = appStore.currentStepId;
+    if (stepId === 1) {
+        return appStore.isStep1DataComplete;
+    } else if (stepId === 2) {
+        return appStore.isStep2DataComplete;
+    } else if (stepId === 3) {
+        return appStore.isStep3DataComplete;
     }
-};
-// Event Listener für Klicks außerhalb registrieren/deregistrieren
-onMounted(() => { document.addEventListener('click', handleClickOutside); });
-onUnmounted(() => { document.removeEventListener('click', handleClickOutside); });
-
-// --- Computed Properties für v-model ---
-// Verbinden das Input-Feld mit der Store-Action inkl. Validierung
-const constructionYear = computed({
-  get: () => appStore.formData.constructionYear,
-  set: (value) => appStore.setConstructionYear(value) // Ruft die Action im Store auf
-});
-const heatedArea = computed({
-  get: () => appStore.formData.heatedArea,
-  set: (value) => appStore.setHeatedArea(value) // Ruft die Action im Store auf
+    // --- Fügen Sie hier die Prüfung für weitere Schritte hinzu ---
+    // else if (stepId === 4) {
+    //     return appStore.isStep4DataComplete; // Beispiel: Getter muss im Store existieren
+    // }
+    // --- Ende der Erweiterungen ---
+    return false; // Standardmäßig ungültig
 });
 
-// --- Datenstrukturen für Auswahlmöglichkeiten ---
-const buildingTypes: { type: BuildingType; label: string; image: string }[] = [
-  { type: 'EFH', label: 'Einfamilienhaus', image: '/images/efh.png' },
-  { type: 'ZFH', label: 'Zweifamilienhaus', image: '/images/zfh.png' },
-  { type: 'MFH', label: 'Mehrfamilienhaus', image: '/images/mfh.png' },
-];
+// Funktion, die beim Klick auf den "Weiter"- oder "Berechnen"-Button ausgeführt wird
+function handleNext() {
+  // 1. Prüfen, ob der aktuelle Schritt gültig ist
+  if (!isCurrentStepValid.value) {
+      console.warn(`Versuch, von Schritt ${appStore.currentStepId} weiterzugehen, obwohl ungültig.`);
+      // HINWEIS: Das Setzen von Fehlern passiert idealerweise direkt bei der Eingabe im Store/Komponente.
+      // Hier könnte man höchstens einen allgemeinen Hinweis geben oder Fokus setzen.
+      return; // Verhindert das Navigieren
+  }
+  // Wenn hier angekommen, ist der Schritt gültig.
 
-// --- Funktionen für Benutzeraktionen ---
-const selectBuildingType = (type: BuildingType) => {
-    appStore.updateFormData({ buildingType: type }); // Ruft nur noch updateFormData auf
-};
+  // 2. Navigiere zum nächsten Schritt oder löse Berechnung aus
+  const currentId = Number(appStore.currentStepId);
+  const nextId = currentId + 1;
+
+  // @ts-ignore
+  if (steps[nextId]) {
+    appStore.nextStep(nextId); // Navigiere zum nächsten Schritt
+  } else {
+    // Wenn kein nächster Schritt definiert ist, sind wir am Ende der Eingabe angelangt
+    console.log("Letzter definierter Eingabeschritt erreicht. Berechnungslogik wird ausgelöst.");
+    triggerCalculation(); // Berechnung starten
+  }
+}
+
+// Funktion, die beim Klick auf den "Zurück"-Button ausgeführt wird
+function handlePrevious() {
+  appStore.previousStep(); // Navigiere zum vorherigen Schritt via Store Action
+}
+
+// Beispiel-Funktion zum Auslösen der Berechnung (asynchron)
+async function triggerCalculation() {
+    console.log("Starte Heizlastberechnung mit Daten:", JSON.parse(JSON.stringify(appStore.formData))); // Tiefe Kopie für Log
+    appStore.uploadError = null; // Alten Fehler löschen
+    appStore.isUploading = true; // Zeige Ladezustand an
+    try {
+        // --- HIER API CALL EINFÜGEN ---
+        // z.B.: const response = await apiClient.post('/api/calculate', appStore.formData);
+        // appStore.setCalculatedResult(response.data);
+
+        // Simulierter Call für Testzwecke:
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Warte 1.5 Sek.
+
+        // Sichere Verwendung der formData Werte mit Fallbacks für die Berechnung
+        const heatedAreaCalc = appStore.formData.heatedArea ?? 100; // Fallback auf 100m²
+        const constructionYearCalc = appStore.formData.constructionYear ?? 2000; // Fallback auf Jahr 2000
+
+        // Simuliertes Ergebnis
+        const dummyResult = {
+            heizlastGesamt: Math.round(heatedAreaCalc * 75 * (constructionYearCalc < 1980 ? 1.2 : 1)),
+            raumweise: [{ raum: "Wohnzimmer", last: 1200 }, { raum: "Küche", last: 800 }],
+            empfehlung: "Basierend auf Ihren Angaben empfehlen wir...",
+            eingabenPruefung: appStore.formData, // Eingaben zur Kontrolle
+        };
+        appStore.setCalculatedResult(dummyResult); // Ergebnis im Store speichern
+
+    } catch (error: any) {
+        console.error("Fehler bei der Heizlastberechnung:", error);
+        // Fehler im Store setzen, um ihn anzuzeigen
+        appStore.uploadError = error.response?.data?.message || error.message || "Unbekannter Fehler bei der Berechnung.";
+        appStore.setCalculatedResult(null); // Kein Ergebnis bei Fehler
+    } finally {
+        appStore.isUploading = false; // Ladezustand beenden
+    }
+}
+
+
+// Beobachtet Änderungen der Schritt-ID, um bei jedem Schrittwechsel zum Seitenanfang zu scrollen
+watch(() => appStore.currentStepId, () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' }); // Sanftes Scrollen
+});
 
 </script>
 
 <template>
-  <div>
-    <!-- Titel für Schritt 1 -->
-    <h2 class="title is-4 mb-5">1. Allgemeine Projektdaten</h2>
+  <section class="section">
+    <div class="container">
+      <!-- Hauptüberschrift -->
+      <h1 class="title has-text-centered">Heizlastrechner</h1>
 
-    <!-- Auswahl Gebäudetyp -->
-    <div class="field mb-5">
-      <!-- Label mit Info-Icon -->
-      <div class="label-with-info">
-        <label class="label">Welche Gebäudeart wird betrachtet?</label>
-        <button
-            class="button is-small is-info is-outlined is-rounded info-icon-button"
-            @click.stop="toggleInfoPopup('buildingType')"
-            aria-label="Info zu Gebäudeart anzeigen"
-        >
-            <span class="icon is-small"><i class="fas fa-question"></i></span>
-        </button>
-        <!-- Info-Popup für Gebäudeart -->
-        <div v-if="activeInfoPopup === 'buildingType'" class="info-popup notification is-info is-light">
-            <button class="delete" @click.stop="toggleInfoPopup('buildingType')"></button>
-            {{ infoTexts.buildingType }}
-        </div>
-      </div>
-      <!-- Karten für die Auswahl -->
-      <div class="columns is-centered is-multiline">
-        <div
-          v-for="btype in buildingTypes" :key="btype.type"
-          class="column is-one-third-desktop is-half-tablet is-full-mobile"
-        >
-          <div
-            class="card is-clickable"
-            @click="selectBuildingType(btype.type)"
-            :class="{ 'is-selected': appStore.formData.buildingType === btype.type }"
-            role="radio" :aria-checked="appStore.formData.buildingType === btype.type" tabindex="0"
-            @keydown.enter="selectBuildingType(btype.type)"
-            @keydown.space.prevent="selectBuildingType(btype.type)"
+      <!-- Fortschrittsanzeige (nur wenn kein Ergebnis) -->
+       <div class="box mb-5 progress-box" v-if="!appStore.calculatedResult">
+          <label class="label">Fortschritt (Schritt {{ appStore.currentStepId }} von {{ totalSteps }})</label>
+          <progress
+              class="progress is-info"
+              :value="appStore.currentStepId"
+              :max="totalSteps"
+              aria-label="Fortschritt des Rechners"
+              aria-valuemin="1"
+              :aria-valuenow="Number(appStore.currentStepId)"
+              :aria-valuemax="totalSteps"
           >
-            <div class="card-image has-text-centered pt-4">
-              <figure class="image is-64x64 is-inline-block">
-                <img :src="btype.image" :alt="btype.label">
-              </figure>
-            </div>
-            <div class="card-content has-text-centered">
-              <p class="building-type-label">{{ btype.label }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Hier kein expliziter Fehlertext für Gebäudetyp, da Button deaktiviert ist -->
-    </div>
-
-    <!-- Eingabe Baujahr -->
-    <div class="field">
-       <!-- Label mit Info-Icon -->
-       <div class="label-with-info">
-          <label class="label" for="constructionYear">Baujahr des Gebäudes</label>
-          <button
-              class="button is-small is-info is-outlined is-rounded info-icon-button"
-              @click.stop="toggleInfoPopup('constructionYear')"
-              aria-label="Info zu Baujahr anzeigen"
-          >
-              <span class="icon is-small"><i class="fas fa-question"></i></span>
-          </button>
-          <!-- Info-Popup für Baujahr -->
-          <div v-if="activeInfoPopup === 'constructionYear'" class="info-popup notification is-info is-light">
-             <button class="delete" @click.stop="toggleInfoPopup('constructionYear')"></button>
-             {{ infoTexts.constructionYear }}
-          </div>
+              {{ Math.round((Number(appStore.currentStepId) / totalSteps) * 100) }}%
+          </progress>
        </div>
-       <!-- Input-Feld mit Fehleranzeige -->
-      <div class="control has-icons-right">
-        <input
-          id="constructionYear"
-          :class="['input', { 'is-danger': !!appStore.validationErrors.constructionYear }]"
-          type="number"
-          :placeholder="`z.B. 1985 (min. 1850, max. ${appStore.currentYear})`"
-          :min="1850"
-          :max="appStore.currentYear"
-          v-model.number="constructionYear"
-          aria-describedby="constructionYearError"
-          :aria-invalid="!!appStore.validationErrors.constructionYear"
-        >
-        <!-- Fehler-Icon -->
-        <span v-if="!!appStore.validationErrors.constructionYear" class="icon is-small is-right has-text-danger">
-            <i class="fas fa-exclamation-triangle"></i>
-        </span>
-      </div>
-      <!-- Fehlermeldung -->
-      <p v-if="appStore.validationErrors.constructionYear" class="help is-danger" id="constructionYearError">
-        {{ appStore.validationErrors.constructionYear }}
-      </p>
-    </div>
 
-    <!-- Eingabe Beheizbare Fläche -->
-    <div class="field mt-4"> <!-- Kleiner Abstand hinzugefügt -->
-       <!-- Label mit Info-Icon -->
-        <div class="label-with-info">
-          <label class="label" for="heatedArea">Beheizbare Fläche (in m²)</label>
-           <button
-              class="button is-small is-info is-outlined is-rounded info-icon-button"
-              @click.stop="toggleInfoPopup('heatedArea')"
-              aria-label="Info zu beheizbarer Fläche anzeigen"
-           >
-              <span class="icon is-small"><i class="fas fa-question"></i></span>
-           </button>
-           <!-- Info-Popup für Fläche -->
-           <div v-if="activeInfoPopup === 'heatedArea'" class="info-popup notification is-info is-light">
-               <button class="delete" @click.stop="toggleInfoPopup('heatedArea')"></button>
-               {{ infoTexts.heatedArea }}
-           </div>
+
+      <!-- Container für Schritt-Inhalt (nur wenn kein Ergebnis) -->
+      <div class="box content-box" v-if="!appStore.calculatedResult">
+        <!-- Ladeanzeige während Berechnung -->
+        <div v-if="appStore.isUploading" class="has-text-centered p-5">
+            <p class="is-size-5">Berechnung läuft...</p>
+            <progress class="progress is-small is-info mt-4" max="100"></progress>
         </div>
-        <!-- Input-Feld mit Fehleranzeige -->
-      <div class="control has-icons-right">
-        <input
-          id="heatedArea"
-          :class="['input', { 'is-danger': !!appStore.validationErrors.heatedArea }]"
-          type="number"
-          placeholder="z.B. 150 (min. 70, max. 400)"
-          min="70" max="400" step="0.1"
-          v-model.number="heatedArea"
-          aria-describedby="heatedAreaError"
-          :aria-invalid="!!appStore.validationErrors.heatedArea"
-        >
-         <!-- Fehler-Icon -->
-        <span v-if="!!appStore.validationErrors.heatedArea" class="icon is-small is-right has-text-danger">
-            <i class="fas fa-exclamation-triangle"></i>
-        </span>
+         <!-- Anzeige des Schritts (wenn nicht geladen wird) -->
+        <div v-else>
+            <div v-if="currentStepComponent">
+               <keep-alive>
+                   <component :is="currentStepComponent" />
+               </keep-alive>
+            </div>
+            <!-- Fallback-Anzeige -->
+            <div v-else class="notification is-warning">
+                <p v-if="Number(appStore.currentStepId) > totalSteps">Alle Schritte abgeschlossen.</p>
+                <p v-else>Schritt {{ appStore.currentStepId }} konnte nicht geladen werden.</p>
+            </div>
+        </div>
+        <!-- Anzeige für Berechnungsfehler -->
+         <div v-if="appStore.uploadError && !appStore.isUploading" class="notification is-danger mt-4">
+           <button class="delete" @click="appStore.uploadError = null"></button>
+           <strong>Fehler bei der Berechnung:</strong><br>
+           {{ appStore.uploadError }}
+         </div>
       </div>
-       <!-- Fehlermeldung -->
-      <p v-if="appStore.validationErrors.heatedArea" class="help is-danger" id="heatedAreaError">
-        {{ appStore.validationErrors.heatedArea }}
-      </p>
-    </div>
 
-  </div>
+      <!-- Navigationsbuttons (nur wenn kein Ergebnis) -->
+      <div class="buttons is-centered mt-5 navigation-buttons" v-if="!appStore.calculatedResult">
+        <!-- Zurück-Button -->
+        <button
+          class="button is-light"
+          @click="handlePrevious"
+          :disabled="!appStore.previousStepExists || appStore.isUploading"
+          aria-label="Zum vorherigen Schritt"
+          >
+          <span class="icon is-small"><i class="fas fa-arrow-left" aria-hidden="true"></i></span>
+          <span>Zurück</span>
+        </button>
+
+        <!-- Weiter-Button (bis zum letzten Schritt) -->
+        <button
+          v-if="Number(appStore.currentStepId) < totalSteps"
+          class="button is-link"
+          :class="{ 'is-loading': appStore.isUploading }"
+          @click="handleNext"
+          :disabled="!isCurrentStepValid || appStore.isUploading"
+          aria-label="Zum nächsten Schritt"
+          >
+          <span>Weiter</span>
+           <span class="icon is-small"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </button>
+
+         <!-- Berechnen-Button (im letzten Schritt) -->
+         <button
+           v-if="Number(appStore.currentStepId) === totalSteps"
+           class="button is-success"
+           :class="{ 'is-loading': appStore.isUploading }"
+           @click="handleNext" 
+           :disabled="!isCurrentStepValid || appStore.isUploading"
+           aria-label="Heizlast berechnen"
+         >
+           <span class="icon is-small"><i class="fas fa-calculator" aria-hidden="true"></i></span>
+           <span>Berechnen</span>
+         </button>
+      </div>
+
+       <!-- Ergebnis-Anzeige (wenn Ergebnis vorhanden) -->
+       <div v-if="appStore.calculatedResult" class="mt-5 notification is-success result-box">
+          <h2 class="subtitle">Berechnungsergebnis:</h2>
+          <!-- Hier Ergebnis schön formatieren statt nur JSON -->
+          <pre>{{ JSON.stringify(appStore.calculatedResult, null, 2) }}</pre>
+           <button class="button is-light mt-4" @click="appStore.resetStore()" aria-label="Neue Berechnung starten">
+               <span class="icon is-small"><i class="fas fa-redo" aria-hidden="true"></i></span>
+               <span>Neue Berechnung</span>
+           </button>
+       </div>
+
+    </div> <!-- Ende .container -->
+  </section> <!-- Ende .section -->
 </template>
 
-<style scoped>
-/* --- Stile für Auswahlkarten --- */
-.card.is-clickable {
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  border: 2px solid transparent;
-  background-color: #fff;
-  border: 1px solid #dbdbdb;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+<style>
+/* Globale Styles oder Anpassungen für Bulma hier */
+/* (FontAwesome muss importiert sein in main.ts) */
+.section {
+  padding-top: 2rem;
+  padding-bottom: 4rem;
+  min-height: 100vh;
 }
-.card.is-clickable:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+.progress-box, .content-box, .result-box {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
-.card.is-selected {
-  border-color: #3273dc;
-  box-shadow: 0 0 0 1px #3273dc;
-  background-color: hsl(204, 86%, 96%);
+.navigation-buttons .button {
+  min-width: 120px;
 }
-.card-content {
-    padding: 0.75rem;
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.result-box pre {
+  background-color: rgba(255, 255, 255, 0.8);
+  color: #363636;
+  padding: 1em;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
-.building-type-label { /* Eigene Klasse, falls spezifisches Styling nötig */
-    font-size: 0.9rem;
-    font-weight: 600;
-}
-.card-image {
-    padding-top: 1rem;
-}
-.card-image img {
-    max-width: 100%;
-    height: auto;
-    max-height: 64px;
-}
-
-/* --- Stile für Label mit Info-Icon und Popup --- */
-.label-with-info {
-    display: flex;
-    align-items: center;
-    position: relative;
-    margin-bottom: 0.5rem;
-    flex-wrap: wrap;
-}
-.label-with-info .label {
-    margin-bottom: 0 !important;
-    margin-right: 0.5rem;
-    line-height: 1.5;
-}
-.info-icon-button {
-    padding: 0.2em 0.5em;
-    height: 1.5em;
-    line-height: 1;
-    align-self: center;
-}
-.info-popup {
-    position: absolute;
-    top: 100%;
-    left: 1.5rem;
-    z-index: 20;
-    width: 300px;
-    max-width: 90vw;
-    margin-top: 0.5rem;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
-    border-radius: 4px;
-    padding: 0.75rem 1rem !important;
-}
-.info-popup .delete {
-    position: absolute;
-    right: 0.5rem;
-    top: 0.5rem;
-}
-
-/* --- Stile für Input-Felder und Fehler --- */
-.control.has-icons-right .input {
-    padding-right: 2.5em; /* Platz für Icon */
-}
-.control.has-icons-right .icon.is-right {
-    right: 0.25em; /* Ggf. anpassen */
-    top: 50%;
-    transform: translateY(-50%);
-    pointer-events: none; /* Icon nicht klickbar */
-    height: 2.5em; /* Bulma Standard für Input Höhe */
-    width: 2.5em;
-    display: inline-flex; /* Stellt Icon-Zentrierung sicher */
-    align-items: center;
-    justify-content: center;
-}
-.help.is-danger {
-     margin-top: 0.25rem;
-     font-size: 0.875rem;
+.content-box .progress.is-small {
+    height: 5px;
 }
 </style>
