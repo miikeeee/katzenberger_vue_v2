@@ -75,7 +75,7 @@ const selectBuildingType = (type: BuildingType) => {
             class="button is-small is-info is-outlined is-rounded info-icon-button"
             @click.stop="toggleInfoPopup('buildingType')"
             aria-label="Info zu Gebäudeart anzeigen"
-            type="button" <!-- Wichtig für Buttons ohne Formularsubmit -->
+            type="button"
         >
             <span class="icon is-small"><i class="fas fa-question"></i></span>
         </button>

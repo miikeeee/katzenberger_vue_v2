@@ -7,7 +7,7 @@ const appStore = useAppStore();
 
 // Asynchrone Definition der Komponenten für jeden Schritt (Code Splitting)
 const steps = {
-  1: defineAsyncComponent(() => import('./components/steps/Step1_ProjectData.vue')),
+  1: defineAsyncComponent(() => import('././components/steps/Step1_ProjectData.vue')),
   2: defineAsyncComponent(() => import('./components/steps/Step2_Renovations.vue')),
   3: defineAsyncComponent(() => import('./components/steps/Step3_OccupantsEnergy.vue')),
   // --- Fügen Sie hier Imports für weitere Schritt-Komponenten hinzu ---
